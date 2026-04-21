@@ -1,0 +1,9 @@
+model_id: runwayml/stable-diffusion-inpainting
+prompt: "A natural and realistic completion"
+negative_prompt: "blurry, distorted, low quality"
+mask_type: center
+image_size: 512
+guidance_scale: 7.5
+num_steps: 30
+ddim_eta: 0.0
+seed: 42

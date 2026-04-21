@@ -1,0 +1,4 @@
+use_controlnet: true
+use_repaint_resampling: true
+use_dit_backbone: false
+use_pnp_guidance: true

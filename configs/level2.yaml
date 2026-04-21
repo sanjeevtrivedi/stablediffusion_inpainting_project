@@ -1,0 +1,5 @@
+learning_rate: 1.0e-5
+batch_size: 2
+train_steps: 1000
+use_mask_aware_conditioning: true
+use_boundary_smoothing: true
