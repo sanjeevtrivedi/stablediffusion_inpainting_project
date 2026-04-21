@@ -78,6 +78,7 @@ Success is measured by consistent improvements in PSNR/SSIM, reduced visual arti
 |- reports/
 |  \- results_summary.md        # Fill after experiments
 |- scripts/
+|  |- download_images.py        # Download sample images from picsum.photos
 |  |- prepare_dataset.py        # Split + pre-save masks
 |  |- run_level1.py
 |  |- run_level2.py
@@ -103,7 +104,19 @@ Success is measured by consistent improvements in PSNR/SSIM, reduced visual arti
 pip install -r requirements.txt
 ```
 
-3. Images are already in `data/samples` (10 × 512×512 downloaded via `picsum.photos`).
+3. Download sample images from `picsum.photos` (default 10):
+
+```bash
+python scripts/download_images.py
+```
+
+Optional: specify custom count.
+
+```bash
+python scripts/download_images.py --count 25 --output-dir data/samples
+```
+
+The script checks filename existence (for example, `sample_01.jpg`) and skips duplicates instead of re-downloading.
 
 4. Prepare dataset splits and pre-save masks (optional but recommended before running experiments):
 
@@ -115,7 +128,26 @@ This creates `train/val/test` folders, generates center and irregular masks for 
 
 ## Run
 
-### Step 0 — Prepare dataset
+### Step 0 — Download sample images
+
+```bash
+python scripts/download_images.py
+```
+
+Useful options:
+
+| Argument | Default | Description |
+|---|---|---|
+| `--count` | `10` | Number of new images to download |
+| `--output-dir` | `data/samples` | Destination folder |
+| `--width` | `512` | Output image width |
+| `--height` | `512` | Output image height |
+| `--seed-offset` | `100` | Seed offset to vary generated images |
+| `--start-index` | `1` | Starting file index (name format: `sample_XX.jpg`) |
+
+If a target filename already exists, it is skipped to avoid duplicate downloads by name.
+
+### Step 1 — Prepare dataset
 
 ```bash
 python scripts/prepare_dataset.py
