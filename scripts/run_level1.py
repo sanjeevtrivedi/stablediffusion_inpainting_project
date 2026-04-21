@@ -34,7 +34,12 @@ def main() -> None:
     (args.output_dir / "predictions").mkdir(parents=True, exist_ok=True)
     (args.output_dir / "panels").mkdir(parents=True, exist_ok=True)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = (
+        "cuda" if torch.cuda.is_available()
+        else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        else "cpu"
+    )
+    
     model = StableDiffusionInpaintingLevel1(
         Level1Config(
             model_id=args.model_id,

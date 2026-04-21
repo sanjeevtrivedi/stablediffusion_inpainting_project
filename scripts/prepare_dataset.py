@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def split_files(files: list, train_ratio: float, val_ratio: float, seed: int) -> tuple:
+def make_splits(files: list, train_ratio: float, val_ratio: float, seed: int) -> tuple:
     rng = random.Random(seed)
     shuffled = files[:]
     rng.shuffle(shuffled)
@@ -53,7 +53,7 @@ def main() -> None:
     if not files:
         raise RuntimeError(f"No images found in {args.data_dir}")
 
-    train, val, test = split_files(files, args.train_ratio, args.val_ratio, args.seed)
+    train, val, test = make_splits(files, args.train_ratio, args.val_ratio, args.seed)
     splits = {"train": train, "val": val, "test": test}
 
     manifest_rows = []

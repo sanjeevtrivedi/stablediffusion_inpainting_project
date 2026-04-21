@@ -98,6 +98,11 @@ Success is measured by consistent improvements in PSNR/SSIM, reduced visual arti
 ## Setup
 
 1. Create and activate a Python environment (recommended: Python 3.10+).
+
+```bash
+python -m venv .venv
+```
+
 2. Install dependencies:
 
 ```bash
@@ -107,13 +112,13 @@ pip install -r requirements.txt
 3. Download sample images from `picsum.photos` (default 10):
 
 ```bash
-python scripts/download_images.py
+python scripts.download_images
 ```
 
 Optional: specify custom count.
 
 ```bash
-python scripts/download_images.py --count 25 --output-dir data/samples
+python -m scripts.download_images --count 25 --output-dir data/samples
 ```
 
 The script checks filename existence (for example, `sample_01.jpg`) and skips duplicates instead of re-downloading.
@@ -121,7 +126,7 @@ The script checks filename existence (for example, `sample_01.jpg`) and skips du
 4. Prepare dataset splits and pre-save masks (optional but recommended before running experiments):
 
 ```bash
-python scripts/prepare_dataset.py --data-dir data/samples --output-dir data/splits
+python -m scripts.prepare_dataset --data-dir data/samples --output-dir data/splits
 ```
 
 This creates `train/val/test` folders, generates center and irregular masks for every image, and writes `data/splits/manifest.csv`.
@@ -150,7 +155,7 @@ If a target filename already exists, it is skipped to avoid duplicate downloads 
 ### Step 1 — Prepare dataset
 
 ```bash
-python scripts/prepare_dataset.py
+python -m scripts/prepare_dataset.py
 ```
 
 ### Level 1 — Quick Win (Stable Diffusion + CFG + DDIM)
@@ -158,7 +163,7 @@ python scripts/prepare_dataset.py
 Inference only, no training required. Downloads `runwayml/stable-diffusion-inpainting` on first run.
 
 ```bash
-python scripts/run_level1.py --data-dir data/samples --output-dir outputs/level1
+python -m scripts.run_level1 --data-dir data/samples --output-dir outputs/level1
 ```
 
 Key options:
