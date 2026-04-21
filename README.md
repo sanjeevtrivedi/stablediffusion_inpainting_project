@@ -619,10 +619,10 @@ Insights of the results and visualization.
 https://arxiv.org/pdf/2201.09865
 https://medium.com/@aromalma/how-to-customize-any-diffusion-models-for-inpainting-178111b239cd
 
-1. Understanding of the problem statements, 
-2. literature survey, 
-3. approach, 
-4. dataset selection, 
+1. Understanding of the problem statements 
+2. literature survey
+3. approach
+4. dataset selection
 5. evaluation metrics
 
 ##############################
