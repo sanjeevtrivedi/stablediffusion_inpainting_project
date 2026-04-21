@@ -1,12 +1,57 @@
 # Diffusion Inpainting Project
 
-Image inpainting with diffusion models — fully implemented across 3 levels of increasing capability.
 
-| Level | Name | Core techniques | Status |
-|-------|------|----------------|--------|
-| 1 | Quick Win | Stable Diffusion Inpainting, CFG, DDIM | ✅ Fully implemented |
-| 2 | Production | Latent diffusion LoRA fine-tune, mask-aware conditioning, boundary smoothing | ✅ Fully implemented |
-| 3 | SOTA | ControlNet + inpainting, RePaint resampling, DiT backbone, PnP guidance | ✅ Fully implemented |
+## Project Brief
+
+This project builds a practical image inpainting system using diffusion models, moving from a fast baseline to production-ready quality and advanced research-level controls. It is designed to be reproducible, measurable, and presentation-ready, with clear scripts for data preparation, training/inference workflows, and evaluation.
+
+## Introduction
+
+Image inpainting restores missing or corrupted regions in an image while preserving visual consistency with surrounding context. Traditional approaches often struggle with semantic coherence and texture realism for complex scenes. Diffusion models address this by iteratively denoising toward plausible reconstructions conditioned on text, masks, and optional structural guidance.
+
+This repository organizes the solution into 3 levels:
+
+1. Level 1 establishes a reliable baseline using Stable Diffusion Inpainting.
+2. Level 2 improves quality and robustness with mask-aware conditioning, LoRA fine-tuning, and seam-aware blending.
+3. Level 3 extends capability with structural control and iterative resampling for stronger fidelity.
+
+## Project Aim
+
+Deliver a scalable inpainting pipeline that can:
+
+1. Reconstruct masked regions with realistic detail and semantic correctness.
+2. Provide measurable quality improvements across progressive system levels.
+3. Support rapid experimentation under limited compute and dataset size.
+4. Produce reproducible outputs suitable for technical review and stakeholder presentation.
+
+## Objectives and Expected Outcomes
+
+### Objectives
+
+1. Build an end-to-end workflow for dataset preparation, inpainting, and evaluation.
+2. Implement level-wise model improvements with traceable configuration changes.
+3. Quantify quality with standardized metrics and qualitative visual inspection.
+4. Compare trade-offs among quality, complexity, and runtime.
+
+### Expected Outcomes
+
+1. Reproducible scripts for all levels and experiment sweeps.
+2. Quantitative reports (`metrics.csv`, `summary.json`) for each level.
+3. Visual comparison panels to validate perceptual realism and edge consistency.
+4. A defensible level-wise story showing incremental gains from baseline to SOTA methods.
+
+## Measurement Framework (Industry View)
+
+This project uses a combined metric strategy because no single metric captures full inpainting quality.
+
+| Measure | What it captures | Why it is relevant |
+|---|---|---|
+| PSNR | Pixel-level reconstruction fidelity | Useful for objective baseline comparison and regression tracking across experiments |
+| SSIM | Structural and perceptual similarity | Better aligns with human-perceived quality than pure error metrics |
+| Visual quality panels | Semantic plausibility and artifact inspection | Critical for identifying boundary seams, texture inconsistencies, and failure modes that scalar metrics may miss |
+| Runtime / steps | Operational efficiency and throughput | Supports production decisions when balancing quality vs latency/cost |
+
+Success is measured by consistent improvements in PSNR/SSIM, reduced visual artifacts at mask boundaries, and acceptable runtime at higher-quality levels.
 
 ## Repository Structure
 
