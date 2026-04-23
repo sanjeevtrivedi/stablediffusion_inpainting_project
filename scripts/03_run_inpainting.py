@@ -61,7 +61,7 @@ def main() -> None:
     # Load model
     print(f"Loading model: {args.model_id}")
     dtype = torch.float16 if device == "cuda" else torch.float32
-    pipe = StableDiffusionInpaintPipeline.from_pretrained(args.model_id, torch_dtype=dtype)
+    pipe = StableDiffusionInpaintPipeline.from_pretrained(args.model_id, torch_dtype=dtype, use_safetensors=False)
     pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
     pipe.to(device)
 
