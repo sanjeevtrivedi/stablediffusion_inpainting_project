@@ -540,7 +540,7 @@ By locking the original model, creating a trainable U-Net encoder clone, and sti
 
 The **U-Net** is the actual engine of Stable Diffusion. It is the core neural network responsible for the "denoising" process. 
 
-Originally invented in 2015 for biomedical image segmentation, the U-Net architecture gets its name from its symmetrical, U-shaped design. However, the U-Net used in Stable Diffusion is heavily modified. It is an **attention-augmented noise predictor** that operates in a compressed mathematical space (the latent space) rather than on raw pixels.
+It is an **attention-augmented noise predictor** that operates in a compressed mathematical space (the latent space) rather than on raw pixels.
 
 Here is a detailed breakdown of how it works, its structural flow, and the mathematics that power it.
 
