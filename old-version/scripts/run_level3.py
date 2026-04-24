@@ -12,14 +12,18 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 
 import torch
 
 from src.data.dataset import load_samples
-from src.eval.metrics import evaluate_pairs, save_metrics_csv, summarize_metrics
+from src.eval.metrics import compute_psnr, compute_ssim, evaluate_pairs, save_metrics_csv, summarize_metrics
 from src.eval.visualize import save_comparison_panel
 from src.models.level3_advanced import Level3Config, Level3SotaPipeline
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Level 3 SOTA inpainting")
@@ -65,6 +69,9 @@ def main() -> None:
             mask=sample.mask,
             negative_prompt=args.negative_prompt,
         )
+        psnr = compute_psnr(sample.image, result)
+        ssim = compute_ssim(sample.image, result)
+
         image_names.append(sample.image_path.name)
         targets.append(sample.image)
         predictions.append(result)
@@ -75,7 +82,7 @@ def main() -> None:
             corrupted=sample.corrupted,
             prediction=result,
             out_path=args.output_dir / "panels" / f"{sample.image_path.stem}_panel.png",
-            title=f"Level 3 | {sample.image_path.name}",
+            title=f"Level 3 | {sample.image_path.name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}",
         )
         result.save(args.output_dir / "predictions" / sample.image_path.name)
 
