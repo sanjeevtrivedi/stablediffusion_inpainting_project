@@ -2,6 +2,8 @@
 data/samples/
 data/splits/
 outputs/
+finetune_dataset/
+splits/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
