@@ -138,7 +138,7 @@ Measures structural and perceptual similarity, better aligns with human percepti
 - Semantic plausibility  like: does the content "make sense"?
 - Failure modes - blurriness, color mismatch, temporal inconsistency
 
-## 5. Diffusion Inpainting Taxonomy
+## 6. Diffusion Inpainting Taxonomy
 ```text
 Diffusion Inpainting
 │
@@ -194,7 +194,7 @@ Diffusion Inpainting
     └── CLIP-aligned loss
 ```
 
-## 6. Paper Comparisons: RePaint vs Stable Diffusion Inpainting vs ControlNet
+## 7. Paper Comparisons: RePaint vs Stable Diffusion Inpainting vs ControlNet
 
 | Dimension | RePaint | Stable Diffusion Inpainting | ControlNet (with Inpainting) |
 |-----------|---------|-----------------------------|------------------------------|
