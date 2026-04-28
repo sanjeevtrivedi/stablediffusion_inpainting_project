@@ -1,5 +1,9 @@
 # Mid-Semester Report
 
+## 0. THE PROBLEM STATEMENT
+<img width="3968" height="266" alt="image" src="https://github.com/user-attachments/assets/d4bf867e-aded-4f93-8508-a4b13d49a96d" />
+
+
 ## 1. Understanding of the Problem Statement
 
 This project solves image inpainting using diffusion models.
