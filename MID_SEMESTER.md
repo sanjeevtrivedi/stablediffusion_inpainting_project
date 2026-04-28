@@ -111,7 +111,7 @@ A lightweight custom dataset is used to fit compute constraints:
 
 ## 5. Evaluation Metrics
 
-The project evaluates outputs using quantitative and qualitative measures.
+The project evaluates outputs using following quantitative measures and by seeing visually i.e. qualitative.
 
 ### 1. PSNR (Peak Signal-to-Noise Ratio)
 Measures pixel-level reconstruction fidelity between original and inpainted image.
@@ -135,10 +135,8 @@ Measures structural and perceptual similarity, better aligns with human percepti
 - **Inpainted:** Model output
 
 **Qualitative checks:**
-- Boundary seam visibility and smoothness
-- Texture realism and artifacts
-- Semantic plausibility (does content "make sense"?)
-- Failure modes (blurriness, color mismatch, temporal inconsistency)
+- Semantic plausibility  like: does the content "make sense"?
+- Failure modes - blurriness, color mismatch, temporal inconsistency
 
 ## References
 1. Andreas Lugmayr et al., RePaint: Inpainting using Denoising Diffusion Probabilistic Models, arXiv:2201.09865, 2022. https://arxiv.org/abs/2201.09865
