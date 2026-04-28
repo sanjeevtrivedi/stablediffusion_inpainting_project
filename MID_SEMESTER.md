@@ -93,7 +93,7 @@ where:
 ## 4. Dataset Selection
 
 ### Selected Dataset Strategy
-A lightweight custom dataset is used to fit compute constraints:
+A lightweight custom dataset **(picsum.photos)** is used to fit compute constraints:
 - **Source:** Images downloaded from picsum.photos (deterministic, reproducible)
 - **Size:** 10–30 images (default 20 for experimentation)
 - **Resolution:** 512×512 pixels (standard for Stable Diffusion)
@@ -138,63 +138,9 @@ Measures structural and perceptual similarity, better aligns with human percepti
 - Semantic plausibility  like: does the content "make sense"?
 - Failure modes - blurriness, color mismatch, temporal inconsistency
 
-## 6. Diffusion Inpainting Taxonomy
-```text
-Diffusion Inpainting
-│
-├── 1. Conditioning Strategy
-│   ├── Training-time (mask-aware models)
-│   └── Inference-time (RePaint, plug-and-play)
-│
-├── 2. Diffusion Space
-│   ├── Pixel (DDPM)
-│   ├── Latent (LDM)
-│   ├── Multi-scale
-│   └── Hybrid (latent + pixel refinement)
-│
-├── 3. Mask Representation
-│   ├── Binary mask
-│   ├── Soft/blurred mask
-│   ├── Progressive masks
-│   └── Learned mask embeddings
-│
-├── 4. Constraint Enforcement
-│   ├── Hard (pixel preservation)
-│   ├── Soft (loss-based)
-│   ├── Hybrid
-│   └── Projection-based constraints
-│
-├── 5. Region Interaction
-│   ├── Independent generation
-│   ├── Step-wise blending
-│   └── Joint modeling (full image)
-│
-├── 6. Guidance Mechanism
-│   ├── None (unconditional)
-│   ├── Text (CFG)
-│   ├── Structural (edges, depth)
-│   └── Semantic (segmentation, layout)
-│
-├── 7. Sampling Strategy
-│   ├── Standard diffusion
-│   ├── Resampling (RePaint)
-│   ├── Posterior sampling
-│   └── Deterministic (DDIM)
-│
-├── 8. Model Type
-│   ├── Unconditional diffusion
-│   ├── Conditional diffusion (mask-aware)
-│   ├── Fine-tuned inpainting models
-│   └── Plug-and-play methods
-│
-└── 9. Training Objective (optional axis)
-    ├── Noise prediction (DDPM loss)
-    ├── Mask-weighted loss
-    ├── Perceptual / adversarial loss
-    └── CLIP-aligned loss
-```
+---
 
-## 7. Paper Comparisons: RePaint vs Stable Diffusion Inpainting vs ControlNet
+## 6. Paper Comparisons: RePaint vs Stable Diffusion Inpainting vs ControlNet
 
 | Dimension | RePaint | Stable Diffusion Inpainting | ControlNet (with Inpainting) |
 |-----------|---------|-----------------------------|------------------------------|
