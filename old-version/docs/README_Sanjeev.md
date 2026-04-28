@@ -633,3 +633,5 @@ $$L_{LDM} = \mathbb{E}_{\mathcal{E}(x), \epsilon \sim \mathcal{N}(0,1), t} \left
 By continuously minimizing this loss across millions of steps, the U-Net's internal weights (in the ResNet blocks and Attention matrices) become exceptionally good at separating meaningful images from pure static, guided precisely by human text.
 
 ---
+
+
