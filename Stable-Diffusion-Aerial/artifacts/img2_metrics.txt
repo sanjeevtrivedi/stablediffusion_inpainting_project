@@ -1,0 +1,21 @@
+============================================================
+INPAINTING PIXEL INTEGRITY REPORT
+============================================================
+Total pixels               : 2,553,588
+Masked pixels              : 28,237 (1.106%)
+
+INTEGRITY CHECK
+----------------------------------------
+Non-masked pixels identical: True
+Pixels changed outside mask: 0
+Max diff outside mask      : 0
+
+INPAINTED REGION
+----------------------------------------
+Pixels changed inside mask : 28,118
+Mean diff inside mask      : 11.652
+Max diff inside mask       : 143
+
+============================================================
+RESULT: PASS - Only vehicle pixels were modified.
+============================================================
