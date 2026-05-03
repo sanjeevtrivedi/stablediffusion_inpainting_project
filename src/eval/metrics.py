@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Iterable, List
 
 import numpy as np
+import torch
+import lpips
 from PIL import Image
 from skimage.metrics import structural_similarity
 
@@ -14,6 +16,7 @@ class MetricResult:
     image_name: str
     psnr: float
     ssim: float
+    lpips_val: float = 0.0
 
 
 def _to_np_rgb(image: Image.Image) -> np.ndarray:
@@ -40,6 +43,28 @@ def compute_ssim(target: Image.Image, prediction: Image.Image) -> float:
             data_range=255,
         )
     )
+
+
+_lpips_model = None
+
+
+def _get_lpips_model() -> lpips.LPIPS:
+    global _lpips_model
+    if _lpips_model is None:
+        _lpips_model = lpips.LPIPS(net="alex").eval()
+    return _lpips_model
+
+
+def compute_lpips(target: Image.Image, prediction: Image.Image) -> float:
+    model = _get_lpips_model()
+    target_np = _to_np_rgb(target) / 255.0
+    pred_np = _to_np_rgb(prediction) / 255.0
+    # LPIPS expects tensors in [-1, 1] with shape (1, 3, H, W)
+    target_t = torch.from_numpy(target_np).permute(2, 0, 1).unsqueeze(0) * 2 - 1
+    pred_t = torch.from_numpy(pred_np).permute(2, 0, 1).unsqueeze(0) * 2 - 1
+    with torch.no_grad():
+        score = model(target_t, pred_t)
+    return float(score.item())
 
 
 def evaluate_pairs(
@@ -72,6 +97,6 @@ def summarize_metrics(results: List[MetricResult]) -> dict:
 def save_metrics_csv(results: List[MetricResult], out_csv: Path) -> None:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", encoding="utf-8") as f:
-        f.write("image_name,psnr,ssim\n")
+        f.write("image_name,psnr,ssim,lpips\n")
         for r in results:
-            f.write(f"{r.image_name},{r.psnr:.6f},{r.ssim:.6f}\n")
+            f.write(f"{r.image_name},{r.psnr:.6f},{r.ssim:.6f},{r.lpips_val:.6f}\n")

@@ -7,8 +7,8 @@ Image inpainting using diffusion models. Given an image with missing regions (ma
 ## Quick Start
 
 ```bash
-# 1. Download 20 sample images
-python scripts/01_download_images.py --count 20
+# 1. Download 10 sample images
+python scripts/01_download_images.py --count 10
 
 # 2. Prepare dataset (split + generate masks)
 python scripts/02_prepare_data.py

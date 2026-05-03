@@ -5,10 +5,6 @@ Supports two modes:
   1. Standard Stable Diffusion Inpainting  (StableDiffusionInpaintPipeline)
   2. ControlNet Inpainting                 (StableDiffusionControlNetInpaintPipeline)
 
-Both modes auto-select the correct device (CUDA > MPS > CPU) and dtype
-(float16 on CUDA, float32 on MPS/CPU).  Outputs are written to separate
-sub-directories (outputs/standard/ and outputs/controlnet/)
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STANDARD SD INPAINTING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -118,7 +114,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.dataset import generate_center_mask, generate_irregular_mask, apply_mask, list_images
-from src.eval.metrics import compute_psnr, compute_ssim, save_metrics_csv, MetricResult
+from src.eval.metrics import compute_psnr, compute_ssim, compute_lpips, save_metrics_csv, MetricResult
 from src.eval.visualize import save_comparison_panel
 
 
@@ -397,7 +393,8 @@ def main() -> None:
         # Compute metrics
         psnr = compute_psnr(image, prediction)
         ssim = compute_ssim(image, prediction)
-        results.append(MetricResult(image_name=image_path.name, psnr=psnr, ssim=ssim))
+        lpips_val = compute_lpips(image, prediction)
+        results.append(MetricResult(image_name=image_path.name, psnr=psnr, ssim=ssim, lpips_val=lpips_val))
 
         # Save outputs
         prediction.save(run_output_dir / "predictions" / image_path.name)
@@ -408,7 +405,7 @@ def main() -> None:
             corrupted=corrupted,
             prediction=prediction,
             out_path=run_output_dir / "panels" / f"{image_path.stem}_panel.png",
-            title=f"{image_path.name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}",
+            title=f"{image_path.name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}, LPIPS: {lpips_val:.4f}",
         )
 
         image_names.append(image_path.name)
@@ -420,11 +417,13 @@ def main() -> None:
 
     mean_psnr = sum(r.psnr for r in results) / len(results) if results else 0
     mean_ssim = sum(r.ssim for r in results) / len(results) if results else 0
+    mean_lpips = sum(r.lpips_val for r in results) / len(results) if results else 0
 
     summary = {
         "count": len(results),
         "mean_psnr": float(mean_psnr),
         "mean_ssim": float(mean_ssim),
+        "mean_lpips": float(mean_lpips),
         "mask_type": args.mask_type,
         "guidance_scale": args.guidance_scale,
         "num_steps": args.num_steps,
@@ -442,6 +441,7 @@ def main() -> None:
     print(f"  Mode: {'ControlNet' if args.use_controlnet else 'Standard SD Inpainting'}")
     print(f"  Mean PSNR: {mean_psnr:.4f} dB")
     print(f"  Mean SSIM: {mean_ssim:.6f}")
+    print(f"  Mean LPIPS: {mean_lpips:.6f}")
     print(f"  Images: {len(results)}")
     print(f"  Mask type: {args.mask_type}")
     print(f"  Output directory: {run_output_dir}")
