@@ -114,7 +114,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.dataset import generate_center_mask, generate_irregular_mask, apply_mask, list_images
-from src.eval.metrics import compute_psnr, compute_ssim, compute_lpips, save_metrics_csv, MetricResult
+from src.eval.metrics import compute_psnr, compute_ssim, compute_lpips, compute_psnr_masked, compute_ssim_masked, compute_lpips_masked, save_metrics_csv, MetricResult
 from src.eval.visualize import save_comparison_panel
 
 
@@ -394,7 +394,13 @@ def main() -> None:
         psnr = compute_psnr(image, prediction)
         ssim = compute_ssim(image, prediction)
         lpips_val = compute_lpips(image, prediction)
-        results.append(MetricResult(image_name=image_path.name, psnr=psnr, ssim=ssim, lpips_val=lpips_val))
+        mask_psnr = compute_psnr_masked(image, prediction, mask)
+        mask_ssim = compute_ssim_masked(image, prediction, mask)
+        mask_lpips = compute_lpips_masked(image, prediction, mask)
+        results.append(MetricResult(
+            image_name=image_path.name, psnr=psnr, ssim=ssim, lpips_val=lpips_val,
+            mask_psnr=mask_psnr, mask_ssim=mask_ssim, mask_lpips=mask_lpips,
+        ))
 
         # Save outputs
         prediction.save(run_output_dir / "predictions" / image_path.name)
@@ -405,7 +411,8 @@ def main() -> None:
             corrupted=corrupted,
             prediction=prediction,
             out_path=run_output_dir / "panels" / f"{image_path.stem}_panel.png",
-            title=f"{image_path.name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}, LPIPS: {lpips_val:.4f}",
+            title=f"{image_path.name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}, LPIPS: {lpips_val:.4f}"
+                  f" | Mask PSNR: {mask_psnr:.2f}, SSIM: {mask_ssim:.4f}, LPIPS: {mask_lpips:.4f}",
         )
 
         image_names.append(image_path.name)
@@ -418,12 +425,18 @@ def main() -> None:
     mean_psnr = sum(r.psnr for r in results) / len(results) if results else 0
     mean_ssim = sum(r.ssim for r in results) / len(results) if results else 0
     mean_lpips = sum(r.lpips_val for r in results) / len(results) if results else 0
+    mean_mask_psnr = sum(r.mask_psnr for r in results) / len(results) if results else 0
+    mean_mask_ssim = sum(r.mask_ssim for r in results) / len(results) if results else 0
+    mean_mask_lpips = sum(r.mask_lpips for r in results) / len(results) if results else 0
 
     summary = {
         "count": len(results),
         "mean_psnr": float(mean_psnr),
         "mean_ssim": float(mean_ssim),
         "mean_lpips": float(mean_lpips),
+        "mean_mask_psnr": float(mean_mask_psnr),
+        "mean_mask_ssim": float(mean_mask_ssim),
+        "mean_mask_lpips": float(mean_mask_lpips),
         "mask_type": args.mask_type,
         "guidance_scale": args.guidance_scale,
         "num_steps": args.num_steps,
@@ -442,6 +455,9 @@ def main() -> None:
     print(f"  Mean PSNR: {mean_psnr:.4f} dB")
     print(f"  Mean SSIM: {mean_ssim:.6f}")
     print(f"  Mean LPIPS: {mean_lpips:.6f}")
+    print(f"  Mean Mask PSNR: {mean_mask_psnr:.4f} dB")
+    print(f"  Mean Mask SSIM: {mean_mask_ssim:.6f}")
+    print(f"  Mean Mask LPIPS: {mean_mask_lpips:.6f}")
     print(f"  Images: {len(results)}")
     print(f"  Mask type: {args.mask_type}")
     print(f"  Output directory: {run_output_dir}")

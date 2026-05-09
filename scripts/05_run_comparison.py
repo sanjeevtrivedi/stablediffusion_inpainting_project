@@ -50,6 +50,9 @@ from src.eval.metrics import (
     compute_psnr,
     compute_ssim,
     compute_lpips,
+    compute_psnr_masked,
+    compute_ssim_masked,
+    compute_lpips_masked,
     save_metrics_csv,
     MetricResult,
 )
@@ -201,15 +204,29 @@ def main() -> None:
         sd_psnr = compute_psnr(image, sd_pred)
         sd_ssim = compute_ssim(image, sd_pred)
         sd_lpips = compute_lpips(image, sd_pred)
+        sd_mask_psnr = compute_psnr_masked(image, sd_pred, mask)
+        sd_mask_ssim = compute_ssim_masked(image, sd_pred, mask)
+        sd_mask_lpips = compute_lpips_masked(image, sd_pred, mask)
         sd_results.append(
-            MetricResult(image_name=f"sd-{image_path.name}", psnr=sd_psnr, ssim=sd_ssim, lpips_val=sd_lpips)
+            MetricResult(
+                image_name=f"sd-{image_path.name}",
+                psnr=sd_psnr, ssim=sd_ssim, lpips_val=sd_lpips,
+                mask_psnr=sd_mask_psnr, mask_ssim=sd_mask_ssim, mask_lpips=sd_mask_lpips,
+            )
         )
 
         cn_psnr = compute_psnr(image, cn_pred)
         cn_ssim = compute_ssim(image, cn_pred)
         cn_lpips = compute_lpips(image, cn_pred)
+        cn_mask_psnr = compute_psnr_masked(image, cn_pred, mask)
+        cn_mask_ssim = compute_ssim_masked(image, cn_pred, mask)
+        cn_mask_lpips = compute_lpips_masked(image, cn_pred, mask)
         cn_results.append(
-            MetricResult(image_name=f"cn-{image_path.name}", psnr=cn_psnr, ssim=cn_ssim, lpips_val=cn_lpips)
+            MetricResult(
+                image_name=f"cn-{image_path.name}",
+                psnr=cn_psnr, ssim=cn_ssim, lpips_val=cn_lpips,
+                mask_psnr=cn_mask_psnr, mask_ssim=cn_mask_ssim, mask_lpips=cn_mask_lpips,
+            )
         )
 
         # ── Save predictions ─────────────────────────────────────────
@@ -223,7 +240,8 @@ def main() -> None:
             corrupted=corrupted,
             prediction=sd_pred,
             out_path=out_dir / "panels" / f"sd-{image_path.stem}_panel.png",
-            title=f"SD | {image_path.name} | PSNR: {sd_psnr:.2f}, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}",
+            title=f"SD | {image_path.name} | PSNR: {sd_psnr:.2f}, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
+                  f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}",
         )
         save_comparison_panel(
             original=image,
@@ -231,12 +249,15 @@ def main() -> None:
             corrupted=corrupted,
             prediction=cn_pred,
             out_path=out_dir / "panels" / f"cn-{image_path.stem}_panel.png",
-            title=f"CN | {image_path.name} | PSNR: {cn_psnr:.2f}, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}",
+            title=f"CN | {image_path.name} | PSNR: {cn_psnr:.2f}, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}"
+                  f" | Mask PSNR: {cn_mask_psnr:.2f}, SSIM: {cn_mask_ssim:.4f}, LPIPS: {cn_mask_lpips:.4f}",
         )
 
         print(
-            f"    SD  → PSNR: {sd_psnr:.2f} dB, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}\n"
+            f"    SD  → PSNR: {sd_psnr:.2f} dB, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
+            f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}\n"
             f"    CN  → PSNR: {cn_psnr:.2f} dB, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}"
+            f" | Mask PSNR: {cn_mask_psnr:.2f}, SSIM: {cn_mask_ssim:.4f}, LPIPS: {cn_mask_lpips:.4f}"
         )
 
     # ── Aggregate metrics ─────────────────────────────────────────────
@@ -252,11 +273,17 @@ def main() -> None:
             "mean_psnr": _mean([r.psnr for r in sd_results]),
             "mean_ssim": _mean([r.ssim for r in sd_results]),
             "mean_lpips": _mean([r.lpips_val for r in sd_results]),
+            "mean_mask_psnr": _mean([r.mask_psnr for r in sd_results]),
+            "mean_mask_ssim": _mean([r.mask_ssim for r in sd_results]),
+            "mean_mask_lpips": _mean([r.mask_lpips for r in sd_results]),
         },
         "controlnet": {
             "mean_psnr": _mean([r.psnr for r in cn_results]),
             "mean_ssim": _mean([r.ssim for r in cn_results]),
             "mean_lpips": _mean([r.lpips_val for r in cn_results]),
+            "mean_mask_psnr": _mean([r.mask_psnr for r in cn_results]),
+            "mean_mask_ssim": _mean([r.mask_ssim for r in cn_results]),
+            "mean_mask_lpips": _mean([r.mask_lpips for r in cn_results]),
         },
         "config": {
             "mask_type": args.mask_type,
@@ -281,9 +308,15 @@ def main() -> None:
     print(f"  Standard SD      : PSNR {summary['standard']['mean_psnr']:.4f} dB, "
           f"SSIM {summary['standard']['mean_ssim']:.6f}, "
           f"LPIPS {summary['standard']['mean_lpips']:.6f}")
+    print(f"    Mask region    : PSNR {summary['standard']['mean_mask_psnr']:.4f} dB, "
+          f"SSIM {summary['standard']['mean_mask_ssim']:.6f}, "
+          f"LPIPS {summary['standard']['mean_mask_lpips']:.6f}")
     print(f"  ControlNet       : PSNR {summary['controlnet']['mean_psnr']:.4f} dB, "
           f"SSIM {summary['controlnet']['mean_ssim']:.6f}, "
           f"LPIPS {summary['controlnet']['mean_lpips']:.6f}")
+    print(f"    Mask region    : PSNR {summary['controlnet']['mean_mask_psnr']:.4f} dB, "
+          f"SSIM {summary['controlnet']['mean_mask_ssim']:.6f}, "
+          f"LPIPS {summary['controlnet']['mean_mask_lpips']:.6f}")
     print(f"  Output directory : {out_dir}")
     print("=" * 60)
 

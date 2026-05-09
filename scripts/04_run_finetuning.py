@@ -135,7 +135,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.dataset import apply_mask, generate_center_mask, generate_irregular_mask
-from src.eval.metrics import MetricResult, compute_psnr, compute_ssim, save_metrics_csv
+from src.eval.metrics import MetricResult, compute_psnr, compute_ssim, compute_lpips, compute_psnr_masked, compute_ssim_masked, compute_lpips_masked, save_metrics_csv
 from src.eval.visualize import save_comparison_panel
 
 
@@ -741,7 +741,14 @@ def run_inference_with_saved_lora(args: argparse.Namespace, lora_dir: Path, devi
 
         psnr = compute_psnr(image, prediction)
         ssim = compute_ssim(image, prediction)
-        results.append(MetricResult(image_name=name, psnr=psnr, ssim=ssim))
+        lpips_val = compute_lpips(image, prediction)
+        mask_psnr = compute_psnr_masked(image, prediction, mask)
+        mask_ssim = compute_ssim_masked(image, prediction, mask)
+        mask_lpips = compute_lpips_masked(image, prediction, mask)
+        results.append(MetricResult(
+            image_name=name, psnr=psnr, ssim=ssim, lpips_val=lpips_val,
+            mask_psnr=mask_psnr, mask_ssim=mask_ssim, mask_lpips=mask_lpips,
+        ))
 
         prediction.save(predictions_dir / name)
         save_comparison_panel(
@@ -750,20 +757,30 @@ def run_inference_with_saved_lora(args: argparse.Namespace, lora_dir: Path, devi
             corrupted=corrupted,
             prediction=prediction,
             out_path=panels_dir / f"{Path(name).stem}_panel.png",
-            title=f"{name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}",
+            title=f"{name} | PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}, LPIPS: {lpips_val:.4f}"
+                  f" | Mask PSNR: {mask_psnr:.2f}, SSIM: {mask_ssim:.4f}, LPIPS: {mask_lpips:.4f}",
         )
 
-        print(f"  demo [{idx + 1}/{len(demo_indices)}] {name} | PSNR={psnr:.3f} SSIM={ssim:.4f}")
+        print(f"  demo [{idx + 1}/{len(demo_indices)}] {name} | PSNR={psnr:.3f} SSIM={ssim:.4f} LPIPS={lpips_val:.4f}"
+              f" | Mask PSNR={mask_psnr:.3f} SSIM={mask_ssim:.4f} LPIPS={mask_lpips:.4f}")
 
     save_metrics_csv(results, demo_output / "metrics.csv")
 
     mean_psnr = float(sum(r.psnr for r in results) / len(results)) if results else 0.0
     mean_ssim = float(sum(r.ssim for r in results) / len(results)) if results else 0.0
+    mean_lpips = float(sum(r.lpips_val for r in results) / len(results)) if results else 0.0
+    mean_mask_psnr = float(sum(r.mask_psnr for r in results) / len(results)) if results else 0.0
+    mean_mask_ssim = float(sum(r.mask_ssim for r in results) / len(results)) if results else 0.0
+    mean_mask_lpips = float(sum(r.mask_lpips for r in results) / len(results)) if results else 0.0
 
     summary = {
         "count": len(results),
         "mean_psnr": mean_psnr,
         "mean_ssim": mean_ssim,
+        "mean_lpips": mean_lpips,
+        "mean_mask_psnr": mean_mask_psnr,
+        "mean_mask_ssim": mean_mask_ssim,
+        "mean_mask_lpips": mean_mask_lpips,
     }
     with (demo_output / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)

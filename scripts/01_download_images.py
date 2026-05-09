@@ -2,7 +2,7 @@
 Download sample images from picsum.photos.
 
 Usage:
-    python scripts/01_download_images.py --count 20 --output-dir data/samples
+    python scripts/01_download_images.py --count 10 --output-dir data/samples
 """
 from __future__ import annotations
 
