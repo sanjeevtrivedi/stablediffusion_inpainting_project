@@ -1,10 +1,6 @@
 #project specific
 data/samples/
-data/splits/
 outputs/
-finetune_dataset/
-splits/
-mid-sem/
 .DS_Store
 
 # Byte-compiled / optimized / DLL files

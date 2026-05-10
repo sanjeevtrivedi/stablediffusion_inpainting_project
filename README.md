@@ -93,8 +93,8 @@ This runs both pipelines on every image in `data/samples/` and saves results to 
 
 - `predictions/sd-stepsNN-*.jpg` and `predictions/cn-stepsNN-*.jpg` – inpainted images
 - `panels/sd-stepsNN-*_panel.png` and `panels/cn-stepsNN-*_panel.png` – 4-column comparison panels (Original | Mask | Corrupted | Inpainted)
-- `metrics.csv` – per-image PSNR, SSIM, LPIPS (whole + mask region)
-- `summary.json` – aggregated mean metrics and experiment configuration
+- `metrics-stepsNN.csv` – per-image PSNR, SSIM, LPIPS (whole + mask region)
+- `summary-stepsNN.json` – aggregated mean metrics and experiment configuration
 
 ## Evaluation Metrics
 

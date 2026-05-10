@@ -1,7 +1,7 @@
 """
 Side-by-side comparison: Standard SD Inpainting vs ControlNet Inpainting.
 
-For each input image the script generates the *same* mask, runs both
+For each input image the script generates the same mask, runs both
 pipelines, and saves the two predictions into outputs/comparison/ with
 prefixed filenames:
 
@@ -9,14 +9,12 @@ prefixed filenames:
     cn-stepsNN-<original_name>   - ControlNet inpainting
 
 Usage examples:
-    python scripts/02_run_comparison.py
-
-    python scripts/02_run_comparison.py \
-        --mask-type irregular \
-        --num-steps 50 \
-        --guidance-scale 8.0
+    python scripts/02_run_comparison.py #default is 20 steps
+    python scripts/02_run_comparison.py --num-steps 50 
 
 """
+
+# Enable future annotations for type hints (Python 3.7+ compatibility)
 from __future__ import annotations
 
 import argparse
@@ -25,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+
+# Standard logging and warning modules
 import logging
 import warnings
 
@@ -39,9 +39,11 @@ from diffusers import (
 )
 from PIL import Image
 
-#Suppress general warnings
+# Suppress general warnings
 warnings.filterwarnings("ignore", category=UserWarning)
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
+# Add project root to sys.path for module imports
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -126,7 +128,9 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     Returns a PIL Image (RGB) as expected by the diffusers ControlNet
     pipeline.
     """
+    # Convert PIL image to numpy array (RGB)
     image_np = np.array(image.convert("RGB"))
+    # Convert to grayscale for edge detection
     gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
 
     # Auto-threshold using the median pixel value (Otsu-style heuristic)
@@ -137,17 +141,19 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Compute Canny edges and convert to 3-channel RGB for ControlNet
     edges = cv2.Canny(gray, low, high)
     edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+    # Return as PIL Image (RGB)
     return Image.fromarray(edges_rgb)
 
 
 def main() -> None:
+
     args = parse_args()
 
+    # Check if the data directory exists
     if not args.data_dir.exists():
         sys.exit(f"ERROR: --data-dir '{args.data_dir}' does not exist.")
 
-    # ── Device & dtype ────────────────────────────────────────────────
-    # Prefer CUDA > MPS > CPU; use float16 only on CUDA for speed
+    # Select device: CUDA (GPU) preferred, then MPS (Apple Silicon), else CPU
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -155,9 +161,10 @@ def main() -> None:
         else "cpu"
     )
     print(f"Using device: {device}")
+    # Use float16 for CUDA, float32 otherwise (saves memory on GPU)
     dtype = torch.float16 if device == "cuda" else torch.float32
 
-    # ── Output directories ────────────────────────────────────────────
+    # Prepare output directories for results, panels, masks, and canny edges
     out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "predictions").mkdir(parents=True, exist_ok=True)
@@ -165,21 +172,19 @@ def main() -> None:
     (out_dir / "masks").mkdir(parents=True, exist_ok=True)
     (out_dir / "canny").mkdir(parents=True, exist_ok=True)
 
-    # ── Load Standard SD Inpainting pipeline ──────────────────────────
-    # Uses the pretrained RunwayML model with DDIM scheduler for
-    # deterministic sampling.  Safety checker disabled on non-CUDA.
+    # Load the standard Stable Diffusion inpainting pipeline
     print(f"Loading Standard SD model: {args.sd_model_id}")
     sd_pipe = StableDiffusionInpaintPipeline.from_pretrained(
         args.sd_model_id, torch_dtype=dtype, use_safetensors=False
     )
+    # Use DDIM scheduler for deterministic sampling
     sd_pipe.scheduler = DDIMScheduler.from_config(sd_pipe.scheduler.config)
     sd_pipe.to(device)
+    # Disable safety checker on non-CUDA devices for compatibility
     if device in ("mps", "cpu"):
         sd_pipe.safety_checker = None
 
-    # ── Load ControlNet Inpainting pipeline ─────────────────────
-    # ControlNet adds structural conditioning on top of the base SD
-    # inpainting model, guiding the generation with edge/structure cues.
+    # Load the ControlNet inpainting pipeline (adds structure guidance)
     print(f"Loading ControlNet weights: {args.controlnet_model_id}")
     controlnet = ControlNetModel.from_pretrained(args.controlnet_model_id, torch_dtype=dtype)
     print(f"Loading ControlNet base model: {args.sd_model_id}")
@@ -194,42 +199,44 @@ def main() -> None:
     if device in ("mps", "cpu"):
         cn_pipe.safety_checker = None
 
-    # ── Discover images ───────────────────────────────────────────────
+    # List all images in the data directory
     image_files = list_images(args.data_dir)
     if not image_files:
         raise RuntimeError(f"No images found in {args.data_dir}")
 
     print(f"Found {len(image_files)} images. Starting comparison...\n")
 
+    # Store metric results for each pipeline
     sd_results: list[MetricResult] = []
     cn_results: list[MetricResult] = []
 
+    # Process each image one by one
     for idx, image_path in enumerate(image_files, 1):
         print(f"  [{idx}/{len(image_files)}] Processing {image_path.name}...")
 
-        # Load and resize
+        # Load image and resize to target size
         image = Image.open(image_path).convert("RGB").resize(
             (args.image_size, args.image_size)
         )
 
-        # Generate a single mask (shared by both pipelines).
-        # For irregular masks, pass a deterministic seed so the mask
-        # is identical across runs, not just within a single run.
+        # Generate a mask (center or irregular) with deterministic seed for reproducibility
         if args.mask_type == "center":
             mask = generate_center_mask(args.image_size, args.image_size)
         else:
             mask = generate_irregular_mask(args.image_size, args.image_size, seed=args.seed + idx)
 
+        # Apply mask to the image (simulate missing region)
         corrupted = apply_mask(image, mask, fill_value=255)
 
-        # Use the same generator seed for both pipelines so any
-        # randomness difference comes only from the model, not the noise.
+        # Use the same random seed for both pipelines for fair comparison
         seed = args.seed + idx
 
-        # ── Standard SD inpainting ────────────────────────────────────
-        # Baseline: prompt-guided denoising conditioned on the masked image.
+        # --- Standard SD inpainting ---
+        # Create a torch random generator for reproducibility
         gen_sd = torch.Generator(device=device).manual_seed(seed)
+        # Measure inference time
         sd_t0 = time.perf_counter()
+        # Run the SD inpainting pipeline
         sd_output = sd_pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,
@@ -241,15 +248,17 @@ def main() -> None:
             generator=gen_sd,
         )
         sd_time = time.perf_counter() - sd_t0
+        # Get the predicted image
         sd_pred = sd_output.images[0]
 
-        # ── ControlNet inpainting ─────────────────────────────────────
-        # control_image is a Canny edge map of the original image.
-        # This gives ControlNet structural guidance (contours, object
-        # boundaries) so the inpainted region follows the scene's geometry.
+        # --- ControlNet inpainting ---
+        # Create a torch random generator for reproducibility
         gen_cn = torch.Generator(device=device).manual_seed(seed)
+        # Generate Canny edge map as control image
         control_image = make_controlnet_condition(image)
+        # Measure inference time
         cn_t0 = time.perf_counter()
+        # Run the ControlNet inpainting pipeline
         cn_output = cn_pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,
@@ -262,9 +271,11 @@ def main() -> None:
             generator=gen_cn,
         )
         cn_time = time.perf_counter() - cn_t0
+        # Get the predicted image
         cn_pred = cn_output.images[0]
 
-        # ── Metrics ──────────────────────────────────────────────────
+        # --- Compute metrics for both outputs ---
+        # Standard SD metrics
         sd_psnr = compute_psnr(image, sd_pred)
         sd_ssim = compute_ssim(image, sd_pred)
         sd_lpips = compute_lpips(image, sd_pred)
@@ -280,6 +291,7 @@ def main() -> None:
             )
         )
 
+        # ControlNet metrics
         cn_psnr = compute_psnr(image, cn_pred)
         cn_ssim = compute_ssim(image, cn_pred)
         cn_lpips = compute_lpips(image, cn_pred)
@@ -295,13 +307,13 @@ def main() -> None:
             )
         )
 
-        # ── Save predictions, mask, and Canny edge map ────────────────
+        # Save predictions, mask, and Canny edge map for inspection
         sd_pred.save(out_dir / "predictions" / f"sd-steps{args.num_steps}-{image_path.name}")
         cn_pred.save(out_dir / "predictions" / f"cn-steps{args.num_steps}-{image_path.name}")
         mask.save(out_dir / "masks" / f"{image_path.stem}_mask.png")
         control_image.save(out_dir / "canny" / f"{image_path.stem}_canny.png")
 
-        # ── Save comparison panels ───────────────────────────────────
+        # Save side-by-side comparison panels for both pipelines
         save_comparison_panel(
             original=image,
             mask=mask,
@@ -321,6 +333,7 @@ def main() -> None:
                   f" | Mask PSNR: {cn_mask_psnr:.2f}, SSIM: {cn_mask_ssim:.4f}, LPIPS: {cn_mask_lpips:.4f}",
         )
 
+        # Print metrics for this image
         print(
             f"    SD  → PSNR: {sd_psnr:.2f} dB, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
             f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}"
@@ -334,7 +347,9 @@ def main() -> None:
     # Write per-image CSV and JSON summary with mean metrics for both
     # pipelines, along with the experiment configuration.
     all_results = sd_results + cn_results
-    save_metrics_csv(all_results, out_dir / "metrics.csv")
+    # Save metrics CSV with steps in filename
+    metrics_filename = f"metrics-steps{args.num_steps}.csv"
+    save_metrics_csv(all_results, out_dir / metrics_filename)
 
     def _mean(vals: list[float]) -> float:
         return sum(vals) / len(vals) if vals else 0.0
@@ -373,7 +388,9 @@ def main() -> None:
         },
     }
 
-    with (out_dir / "summary.json").open("w", encoding="utf-8") as f:
+    # Save summary JSON with steps in filename
+    summary_filename = f"summary-steps{args.num_steps}.json"
+    with (out_dir / summary_filename).open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
     # ── Print summary ─────────────────────────────────────────────────
