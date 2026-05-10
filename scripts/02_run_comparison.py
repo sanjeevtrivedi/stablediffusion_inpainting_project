@@ -5,27 +5,30 @@ For each input image the script generates the *same* mask, runs both
 pipelines, and saves the two predictions into outputs/comparison/ with
 prefixed filenames:
 
-    sd-<original_name>   - Standard Stable Diffusion inpainting
-    cn-<original_name>   - ControlNet inpainting
+    sd-stepsNN-<original_name>   - Standard Stable Diffusion inpainting
+    cn-stepsNN-<original_name>   - ControlNet inpainting
 
 Usage examples:
     python scripts/02_run_comparison.py
 
     python scripts/02_run_comparison.py \
-        --data-dir data/samples \
-        --output-dir outputs/comparison \
         --mask-type irregular \
         --num-steps 50 \
-        --guidance-scale 8.0 \
-        --seed 42
+        --guidance-scale 8.0
+
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
+import logging
+import warnings
+
+import cv2
 import numpy as np
 import torch
 from diffusers import (
@@ -35,6 +38,9 @@ from diffusers import (
     StableDiffusionInpaintPipeline,
 )
 from PIL import Image
+
+#Suppress general warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -97,7 +103,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--guidance-scale", type=float, default=7.5)
     # num-steps: number of DDIM denoising steps.  More steps improve
     # quality at the cost of inference time; affects both pipelines.
-    parser.add_argument("--num-steps", type=int, default=10)
+    parser.add_argument("--num-steps", type=int, default=20)
     # ddim-eta: stochasticity parameter for the DDIM scheduler.
     # 0.0 = fully deterministic; 1.0 = equivalent to DDPM.
     parser.add_argument("--ddim-eta", type=float, default=0.0)
@@ -108,16 +114,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def make_controlnet_condition(image: Image.Image, mask: Image.Image) -> torch.Tensor:
-    """Build the ControlNet conditioning tensor for inpainting.
+def make_controlnet_condition(image: Image.Image) -> Image.Image:
+    """Build a Canny edge map as the ControlNet conditioning image.
 
-    Pixels inside the mask are set to -1 so the model treats them as
-    the region to fill.  The result is a (1, 3, H, W) tensor in [-1, 1].
+    Edges are computed from the original (unmasked) image so ControlNet
+    has structural context for the full scene, including the region to
+    fill.  The edge map guides the model to produce inpainting that is
+    consistent with the surrounding structure (lines, contours, object
+    boundaries).
+
+    Returns a PIL Image (RGB) as expected by the diffusers ControlNet
+    pipeline.
     """
-    image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-    mask_np = np.array(mask.convert("L")).astype(np.float32) / 255.0
-    image_np[mask_np > 0.5] = -1.0
-    return torch.from_numpy(image_np).permute(2, 0, 1).unsqueeze(0)
+    image_np = np.array(image.convert("RGB"))
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+    # Auto-threshold using the median pixel value (Otsu-style heuristic)
+    median = np.median(gray)
+    low = int(max(0, 0.66 * median))
+    high = int(min(255, 1.33 * median))
+
+    # Compute Canny edges and convert to 3-channel RGB for ControlNet
+    edges = cv2.Canny(gray, low, high)
+    edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+    return Image.fromarray(edges_rgb)
 
 
 def main() -> None:
@@ -142,6 +162,8 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "predictions").mkdir(parents=True, exist_ok=True)
     (out_dir / "panels").mkdir(parents=True, exist_ok=True)
+    (out_dir / "masks").mkdir(parents=True, exist_ok=True)
+    (out_dir / "canny").mkdir(parents=True, exist_ok=True)
 
     # ── Load Standard SD Inpainting pipeline ──────────────────────────
     # Uses the pretrained RunwayML model with DDIM scheduler for
@@ -190,11 +212,13 @@ def main() -> None:
             (args.image_size, args.image_size)
         )
 
-        # Generate a single mask (shared by both pipelines)
+        # Generate a single mask (shared by both pipelines).
+        # For irregular masks, pass a deterministic seed so the mask
+        # is identical across runs, not just within a single run.
         if args.mask_type == "center":
             mask = generate_center_mask(args.image_size, args.image_size)
         else:
-            mask = generate_irregular_mask(args.image_size, args.image_size)
+            mask = generate_irregular_mask(args.image_size, args.image_size, seed=args.seed + idx)
 
         corrupted = apply_mask(image, mask, fill_value=255)
 
@@ -205,6 +229,7 @@ def main() -> None:
         # ── Standard SD inpainting ────────────────────────────────────
         # Baseline: prompt-guided denoising conditioned on the masked image.
         gen_sd = torch.Generator(device=device).manual_seed(seed)
+        sd_t0 = time.perf_counter()
         sd_output = sd_pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,
@@ -215,12 +240,16 @@ def main() -> None:
             eta=args.ddim_eta,
             generator=gen_sd,
         )
+        sd_time = time.perf_counter() - sd_t0
         sd_pred = sd_output.images[0]
 
         # ── ControlNet inpainting ─────────────────────────────────────
-        # Adds a structural conditioning image to guide the generation.
+        # control_image is a Canny edge map of the original image.
+        # This gives ControlNet structural guidance (contours, object
+        # boundaries) so the inpainted region follows the scene's geometry.
         gen_cn = torch.Generator(device=device).manual_seed(seed)
-        control_image = make_controlnet_condition(image, mask)
+        control_image = make_controlnet_condition(image)
+        cn_t0 = time.perf_counter()
         cn_output = cn_pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,
@@ -232,6 +261,7 @@ def main() -> None:
             eta=args.ddim_eta,
             generator=gen_cn,
         )
+        cn_time = time.perf_counter() - cn_t0
         cn_pred = cn_output.images[0]
 
         # ── Metrics ──────────────────────────────────────────────────
@@ -243,9 +273,10 @@ def main() -> None:
         sd_mask_lpips = compute_lpips_masked(image, sd_pred, mask)
         sd_results.append(
             MetricResult(
-                image_name=f"sd-{image_path.name}",
+                image_name=f"sd-steps{args.num_steps}-{image_path.name}",
                 psnr=sd_psnr, ssim=sd_ssim, lpips_val=sd_lpips,
                 mask_psnr=sd_mask_psnr, mask_ssim=sd_mask_ssim, mask_lpips=sd_mask_lpips,
+                time_sec=sd_time,
             )
         )
 
@@ -257,15 +288,18 @@ def main() -> None:
         cn_mask_lpips = compute_lpips_masked(image, cn_pred, mask)
         cn_results.append(
             MetricResult(
-                image_name=f"cn-{image_path.name}",
+                image_name=f"cn-steps{args.num_steps}-{image_path.name}",
                 psnr=cn_psnr, ssim=cn_ssim, lpips_val=cn_lpips,
                 mask_psnr=cn_mask_psnr, mask_ssim=cn_mask_ssim, mask_lpips=cn_mask_lpips,
+                time_sec=cn_time,
             )
         )
 
-        # ── Save predictions ─────────────────────────────────────────
-        sd_pred.save(out_dir / "predictions" / f"sd-{image_path.name}")
-        cn_pred.save(out_dir / "predictions" / f"cn-{image_path.name}")
+        # ── Save predictions, mask, and Canny edge map ────────────────
+        sd_pred.save(out_dir / "predictions" / f"sd-steps{args.num_steps}-{image_path.name}")
+        cn_pred.save(out_dir / "predictions" / f"cn-steps{args.num_steps}-{image_path.name}")
+        mask.save(out_dir / "masks" / f"{image_path.stem}_mask.png")
+        control_image.save(out_dir / "canny" / f"{image_path.stem}_canny.png")
 
         # ── Save comparison panels ───────────────────────────────────
         save_comparison_panel(
@@ -273,8 +307,8 @@ def main() -> None:
             mask=mask,
             corrupted=corrupted,
             prediction=sd_pred,
-            out_path=out_dir / "panels" / f"sd-{image_path.stem}_panel.png",
-            title=f"SD | {image_path.name} | PSNR: {sd_psnr:.2f}, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
+            out_path=out_dir / "panels" / f"sd-steps{args.num_steps}-{image_path.stem}_panel.png",
+            title=f"SD | steps={args.num_steps} | {image_path.name} | PSNR: {sd_psnr:.2f}, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
                   f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}",
         )
         save_comparison_panel(
@@ -282,16 +316,18 @@ def main() -> None:
             mask=mask,
             corrupted=corrupted,
             prediction=cn_pred,
-            out_path=out_dir / "panels" / f"cn-{image_path.stem}_panel.png",
-            title=f"CN | {image_path.name} | PSNR: {cn_psnr:.2f}, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}"
+            out_path=out_dir / "panels" / f"cn-steps{args.num_steps}-{image_path.stem}_panel.png",
+            title=f"CN | steps={args.num_steps} | {image_path.name} | PSNR: {cn_psnr:.2f}, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}"
                   f" | Mask PSNR: {cn_mask_psnr:.2f}, SSIM: {cn_mask_ssim:.4f}, LPIPS: {cn_mask_lpips:.4f}",
         )
 
         print(
             f"    SD  → PSNR: {sd_psnr:.2f} dB, SSIM: {sd_ssim:.4f}, LPIPS: {sd_lpips:.4f}"
-            f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}\n"
+            f" | Mask PSNR: {sd_mask_psnr:.2f}, SSIM: {sd_mask_ssim:.4f}, LPIPS: {sd_mask_lpips:.4f}"
+            f" | {sd_time:.2f}s\n"
             f"    CN  → PSNR: {cn_psnr:.2f} dB, SSIM: {cn_ssim:.4f}, LPIPS: {cn_lpips:.4f}"
             f" | Mask PSNR: {cn_mask_psnr:.2f}, SSIM: {cn_mask_ssim:.4f}, LPIPS: {cn_mask_lpips:.4f}"
+            f" | {cn_time:.2f}s"
         )
 
     # ── Aggregate metrics ─────────────────────────────────────────────
@@ -312,6 +348,8 @@ def main() -> None:
             "mean_mask_psnr": _mean([r.mask_psnr for r in sd_results]),
             "mean_mask_ssim": _mean([r.mask_ssim for r in sd_results]),
             "mean_mask_lpips": _mean([r.mask_lpips for r in sd_results]),
+            "mean_time_sec": _mean([r.time_sec for r in sd_results]),
+            "total_time_sec": sum(r.time_sec for r in sd_results),
         },
         "controlnet": {
             "mean_psnr": _mean([r.psnr for r in cn_results]),
@@ -320,6 +358,8 @@ def main() -> None:
             "mean_mask_psnr": _mean([r.mask_psnr for r in cn_results]),
             "mean_mask_ssim": _mean([r.mask_ssim for r in cn_results]),
             "mean_mask_lpips": _mean([r.mask_lpips for r in cn_results]),
+            "mean_time_sec": _mean([r.time_sec for r in cn_results]),
+            "total_time_sec": sum(r.time_sec for r in cn_results),
         },
         "config": {
             "mask_type": args.mask_type,
@@ -343,13 +383,15 @@ def main() -> None:
     print(f"  Mask type        : {args.mask_type}")
     print(f"  Standard SD      : PSNR {summary['standard']['mean_psnr']:.4f} dB, "
           f"SSIM {summary['standard']['mean_ssim']:.6f}, "
-          f"LPIPS {summary['standard']['mean_lpips']:.6f}")
+          f"LPIPS {summary['standard']['mean_lpips']:.6f}, "
+          f"Time {summary['standard']['mean_time_sec']:.2f}s/img ({summary['standard']['total_time_sec']:.1f}s total)")
     print(f"    Mask region    : PSNR {summary['standard']['mean_mask_psnr']:.4f} dB, "
           f"SSIM {summary['standard']['mean_mask_ssim']:.6f}, "
           f"LPIPS {summary['standard']['mean_mask_lpips']:.6f}")
     print(f"  ControlNet       : PSNR {summary['controlnet']['mean_psnr']:.4f} dB, "
           f"SSIM {summary['controlnet']['mean_ssim']:.6f}, "
-          f"LPIPS {summary['controlnet']['mean_lpips']:.6f}")
+          f"LPIPS {summary['controlnet']['mean_lpips']:.6f}, "
+          f"Time {summary['controlnet']['mean_time_sec']:.2f}s/img ({summary['controlnet']['total_time_sec']:.1f}s total)")
     print(f"    Mask region    : PSNR {summary['controlnet']['mean_mask_psnr']:.4f} dB, "
           f"SSIM {summary['controlnet']['mean_mask_ssim']:.6f}, "
           f"LPIPS {summary['controlnet']['mean_mask_lpips']:.6f}")

@@ -27,6 +27,7 @@ class MetricResult:
     mask_psnr: float = 0.0
     mask_ssim: float = 0.0
     mask_lpips: float = 0.0
+    time_sec: float = 0.0
 
 
 def _to_np_rgb(image: Image.Image) -> np.ndarray:
@@ -207,9 +208,10 @@ def compute_lpips_masked(
 def save_metrics_csv(results: List[MetricResult], out_csv: Path) -> None:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", encoding="utf-8") as f:
-        f.write("image_name,psnr,ssim,lpips,mask_psnr,mask_ssim,mask_lpips\n")
+        f.write("image_name,psnr,ssim,lpips,mask_psnr,mask_ssim,mask_lpips,time_sec\n")
         for r in results:
             f.write(
                 f"{r.image_name},{r.psnr:.6f},{r.ssim:.6f},{r.lpips_val:.6f},"
-                f"{r.mask_psnr:.6f},{r.mask_ssim:.6f},{r.mask_lpips:.6f}\n"
+                f"{r.mask_psnr:.6f},{r.mask_ssim:.6f},{r.mask_lpips:.6f},"
+                f"{r.time_sec:.3f}\n"
             )

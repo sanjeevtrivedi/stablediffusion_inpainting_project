@@ -43,15 +43,17 @@ def generate_center_mask(width: int, height: int, ratio: float = 0.35) -> Image.
     return mask
 
 
-def generate_irregular_mask(width: int, height: int, strokes: int = 6) -> Image.Image:
+def generate_irregular_mask(width: int, height: int, strokes: int = 6, seed: int | None = None) -> Image.Image:
     """Generate irregular brush-like mask using random strokes.
 
     Draws multiple random line segments with varying widths to simulate
     free-form masks commonly used in inpainting benchmarks.
+
+    Pass a fixed *seed* to produce the same mask across runs.
     """
     mask = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(mask)
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     for _ in range(strokes):
         x1, y1 = int(rng.integers(0, width)), int(rng.integers(0, height))

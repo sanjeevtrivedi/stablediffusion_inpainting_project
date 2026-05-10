@@ -2,7 +2,7 @@
 Download sample images from picsum.photos.
 
 Usage:
-    python scripts/01_download_images.py --count 10 --output-dir data/samples
+    python scripts/01_download_images.py
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download images from picsum.photos")
-    parser.add_argument("--count", type=int, default=10, help="Number of images to download")
+    parser.add_argument("--count", type=int, default=3, help="Number of images to download")
     parser.add_argument("--output-dir", type=Path, default=Path("data/samples"))
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
