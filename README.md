@@ -57,12 +57,12 @@ pip install -r requirements.txt
 ### 1. Download Sample Images
 
 ```bash
-python scripts/01_download_images.py --count 10 --output-dir data/samples
+python scripts/01_download_images.py
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--count` | 10 | Number of images to download |
+| `--count` |  3 | Number of images to download |
 | `--output-dir` | `data/samples` | Destination directory |
 | `--width` | 512 | Image width |
 | `--height` | 512 | Image height |
@@ -81,7 +81,7 @@ This runs both pipelines on every image in `data/samples/` and saves results to 
 |------|---------|-------------|
 | `--data-dir` | `data/samples` | Input image directory |
 | `--output-dir` | `outputs/comparison` | Output directory |
-| `--mask-type` | `center` | Mask type: `center` or `irregular` |
+| `--mask-type` | `irregular` | Mask type: `center` or `irregular` |
 | `--num-steps` | 50 | DDIM denoising steps |
 | `--guidance-scale` | 7.5 | Classifier-free guidance scale |
 | `--image-size` | 512 | Resize images to this resolution |
@@ -91,8 +91,8 @@ This runs both pipelines on every image in `data/samples/` and saves results to 
 
 **Output files:**
 
-- `predictions/sd-*.jpg` and `predictions/cn-*.jpg` – inpainted images
-- `panels/sd-*_panel.png` and `panels/cn-*_panel.png` – 4-column comparison panels (Original | Mask | Corrupted | Inpainted)
+- `predictions/sd-stepsNN-*.jpg` and `predictions/cn-stepsNN-*.jpg` – inpainted images
+- `panels/sd-stepsNN-*_panel.png` and `panels/cn-stepsNN-*_panel.png` – 4-column comparison panels (Original | Mask | Corrupted | Inpainted)
 - `metrics.csv` – per-image PSNR, SSIM, LPIPS (whole + mask region)
 - `summary.json` – aggregated mean metrics and experiment configuration
 
