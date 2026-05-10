@@ -133,7 +133,7 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Convert to grayscale for edge detection
     gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
 
-    # Auto-threshold using the median pixel value (Otsu-style heuristic)
+    # Auto-threshold using the median pixel value (Otsu-style)
     median = np.median(gray)
     low = int(max(0, 0.66 * median))
     high = int(min(255, 1.33 * median))
@@ -144,6 +144,16 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Return as PIL Image (RGB)
     return Image.fromarray(edges_rgb)
 
+def make_controlnet_condition_mask(image: Image.Image, mask: Image.Image) -> torch.Tensor:
+    """Build the ControlNet conditioning tensor for inpainting.
+
+    Masked pixels are set to -1 so the model treats them as the region to fill.
+    Returns shape (1, 3, H, W) with values in [-1, 1].
+    """
+    image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
+    mask_np = np.array(mask.convert("L")).astype(np.float32) / 255.0
+    image_np[mask_np > 0.5] = -1.0
+    return torch.from_numpy(image_np).permute(2, 0, 1).unsqueeze(0)
 
 def main() -> None:
 
