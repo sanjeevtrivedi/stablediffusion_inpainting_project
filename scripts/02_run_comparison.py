@@ -144,16 +144,32 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Return as PIL Image (RGB)
     return Image.fromarray(edges_rgb)
 
-def make_controlnet_condition_mask(image: Image.Image, mask: Image.Image) -> torch.Tensor:
-    """Build the ControlNet conditioning tensor for inpainting.
+def make_controlnet_condition_mask(image: Image.Image, mask: Image.Image) -> Image.Image:
+    """Build a Canny edge map only for the masked (inpaint) region.
 
-    Masked pixels are set to -1 so the model treats them as the region to fill.
-    Returns shape (1, 3, H, W) with values in [-1, 1].
+    Edges are computed from the full image but zeroed outside the mask,
+    so ControlNet receives structural guidance only within the region to
+    fill.  This can help the model focus on reconstructing structure
+    inside the hole without being influenced by surrounding edges.
+
+    Returns a PIL Image (RGB) – same type as make_controlnet_condition()
+    so the two functions are interchangeable at the call site.
     """
-    image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-    mask_np = np.array(mask.convert("L")).astype(np.float32) / 255.0
-    image_np[mask_np > 0.5] = -1.0
-    return torch.from_numpy(image_np).permute(2, 0, 1).unsqueeze(0)
+    image_np = np.array(image.convert("RGB"))
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+    median = np.median(gray)
+    low = int(max(0, 0.66 * median))
+    high = int(min(255, 1.33 * median))
+
+    edges = cv2.Canny(gray, low, high)
+
+    # Zero out edges outside the mask – keep only masked region edges
+    mask_np = np.array(mask.convert("L"))
+    edges[mask_np < 128] = 0
+
+    edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+    return Image.fromarray(edges_rgb)
 
 def main() -> None:
 
@@ -265,7 +281,7 @@ def main() -> None:
         # Create a torch random generator for reproducibility
         gen_cn = torch.Generator(device=device).manual_seed(seed)
         # Generate Canny edge map as control image
-        control_image = make_controlnet_condition(image)
+        control_image = make_controlnet_condition_mask(image, mask)
         # Measure inference time
         cn_t0 = time.perf_counter()
         # Run the ControlNet inpainting pipeline
