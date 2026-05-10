@@ -1,3 +1,8 @@
+"""Qualitative visualization of inpainting results.
+
+Generates side-by-side comparison panels showing the original image,
+mask, corrupted input, and inpainted prediction.
+"""
 from __future__ import annotations
 
 from pathlib import Path

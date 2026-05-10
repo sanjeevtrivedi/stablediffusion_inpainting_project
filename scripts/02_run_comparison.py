@@ -5,13 +5,13 @@ For each input image the script generates the *same* mask, runs both
 pipelines, and saves the two predictions into outputs/comparison/ with
 prefixed filenames:
 
-    sd-<original_name>   – Standard Stable Diffusion inpainting
-    cn-<original_name>   – ControlNet inpainting
+    sd-<original_name>   - Standard Stable Diffusion inpainting
+    cn-<original_name>   - ControlNet inpainting
 
 Usage examples:
-    python scripts/05_run_comparison.py
+    python scripts/02_run_comparison.py
 
-    python scripts/05_run_comparison.py \
+    python scripts/02_run_comparison.py \
         --data-dir data/samples \
         --output-dir outputs/comparison \
         --mask-type irregular \
@@ -60,33 +60,59 @@ from src.eval.visualize import save_comparison_panel
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Compare Standard SD Inpainting vs ControlNet Inpainting"
-    )
+    parser = argparse.ArgumentParser(description="Compare Standard SD Inpainting vs ControlNet Inpainting")
+
+    # ── I/O paths ─────────────────────────────────────────────────────
     parser.add_argument("--data-dir", type=Path, default=Path("data/samples"))
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/comparison"))
+
+    # ── Model identifiers ─────────────────────────────────────────────
+    # SD model: used as the base inpainting backbone for BOTH pipelines.
+    # ControlNet model: auxiliary structure-guidance network layered on
+    # top of the SD model; only used by the ControlNet pipeline.
     parser.add_argument("--sd-model-id", type=str, default="runwayml/stable-diffusion-inpainting")
-    parser.add_argument(
-        "--controlnet-model-id",
-        type=str,
-        default="lllyasviel/control_v11p_sd15_inpaint",
-    )
+    parser.add_argument("--controlnet-model-id", type=str, default="lllyasviel/control_v11p_sd15_inpaint")
+
+    # ── Text conditioning (shared by both pipelines) ──────────────────
+    # The prompt steers the denoising process via cross-attention in the
+    # U-Net.  The negative prompt discourages undesirable attributes
+    # during classifier-free guidance.
     parser.add_argument("--prompt", type=str, default="A realistic and coherent scene completion")
     parser.add_argument("--negative-prompt", type=str, default="blurry, distorted, low quality")
-    parser.add_argument("--mask-type", type=str, default="center", choices=["center", "irregular"])
+
+    # ── Mask & image configuration ────────────────────────────────────
+    # mask-type: determines the shape of the region to inpaint.
+    #   "center"    – rectangular hole in the centre (good for benchmarking)
+    #   "irregular" – random brush strokes (closer to real-world damage)
+    # The same mask is fed to both SD and ControlNet for a fair comparison.
+    parser.add_argument("--mask-type", type=str, default="irregular", choices=["center", "irregular"])
+    # image-size: both pipelines resize inputs to this square resolution.
+    # SD inpainting expects 512×512; larger sizes increase VRAM usage.
     parser.add_argument("--image-size", type=int, default=512)
+
+    # ── Sampling parameters (shared by both pipelines) ────────────────
+    # guidance-scale: classifier-free guidance weight.  Higher values
+    # make the output follow the prompt more closely but may reduce
+    # diversity.  Applied identically to SD and ControlNet pipelines.
     parser.add_argument("--guidance-scale", type=float, default=7.5)
-    parser.add_argument("--num-steps", type=int, default=50)
+    # num-steps: number of DDIM denoising steps.  More steps improve
+    # quality at the cost of inference time; affects both pipelines.
+    parser.add_argument("--num-steps", type=int, default=10)
+    # ddim-eta: stochasticity parameter for the DDIM scheduler.
+    # 0.0 = fully deterministic; 1.0 = equivalent to DDPM.
     parser.add_argument("--ddim-eta", type=float, default=0.0)
+    # seed: base random seed.  Each image uses (seed + image_index) so
+    # both pipelines receive the same initial noise for fair comparison.
     parser.add_argument("--seed", type=int, default=42)
+
     return parser.parse_args()
 
 
 def make_controlnet_condition(image: Image.Image, mask: Image.Image) -> torch.Tensor:
     """Build the ControlNet conditioning tensor for inpainting.
 
-    Masked pixels are set to -1 so the model treats them as the region to fill.
-    Returns shape (1, 3, H, W) with values in [-1, 1].
+    Pixels inside the mask are set to -1 so the model treats them as
+    the region to fill.  The result is a (1, 3, H, W) tensor in [-1, 1].
     """
     image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
     mask_np = np.array(mask.convert("L")).astype(np.float32) / 255.0
@@ -101,6 +127,7 @@ def main() -> None:
         sys.exit(f"ERROR: --data-dir '{args.data_dir}' does not exist.")
 
     # ── Device & dtype ────────────────────────────────────────────────
+    # Prefer CUDA > MPS > CPU; use float16 only on CUDA for speed
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -117,6 +144,8 @@ def main() -> None:
     (out_dir / "panels").mkdir(parents=True, exist_ok=True)
 
     # ── Load Standard SD Inpainting pipeline ──────────────────────────
+    # Uses the pretrained RunwayML model with DDIM scheduler for
+    # deterministic sampling.  Safety checker disabled on non-CUDA.
     print(f"Loading Standard SD model: {args.sd_model_id}")
     sd_pipe = StableDiffusionInpaintPipeline.from_pretrained(
         args.sd_model_id, torch_dtype=dtype, use_safetensors=False
@@ -126,7 +155,9 @@ def main() -> None:
     if device in ("mps", "cpu"):
         sd_pipe.safety_checker = None
 
-    # ── Load ControlNet Inpainting pipeline ───────────────────────────
+    # ── Load ControlNet Inpainting pipeline ─────────────────────
+    # ControlNet adds structural conditioning on top of the base SD
+    # inpainting model, guiding the generation with edge/structure cues.
     print(f"Loading ControlNet weights: {args.controlnet_model_id}")
     controlnet = ControlNetModel.from_pretrained(args.controlnet_model_id, torch_dtype=dtype)
     print(f"Loading ControlNet base model: {args.sd_model_id}")
@@ -167,10 +198,12 @@ def main() -> None:
 
         corrupted = apply_mask(image, mask, fill_value=255)
 
-        # Use the same generator seed for both pipelines
+        # Use the same generator seed for both pipelines so any
+        # randomness difference comes only from the model, not the noise.
         seed = args.seed + idx
 
         # ── Standard SD inpainting ────────────────────────────────────
+        # Baseline: prompt-guided denoising conditioned on the masked image.
         gen_sd = torch.Generator(device=device).manual_seed(seed)
         sd_output = sd_pipe(
             prompt=args.prompt,
@@ -185,6 +218,7 @@ def main() -> None:
         sd_pred = sd_output.images[0]
 
         # ── ControlNet inpainting ─────────────────────────────────────
+        # Adds a structural conditioning image to guide the generation.
         gen_cn = torch.Generator(device=device).manual_seed(seed)
         control_image = make_controlnet_condition(image, mask)
         cn_output = cn_pipe(
@@ -261,6 +295,8 @@ def main() -> None:
         )
 
     # ── Aggregate metrics ─────────────────────────────────────────────
+    # Write per-image CSV and JSON summary with mean metrics for both
+    # pipelines, along with the experiment configuration.
     all_results = sd_results + cn_results
     save_metrics_csv(all_results, out_dir / "metrics.csv")
 

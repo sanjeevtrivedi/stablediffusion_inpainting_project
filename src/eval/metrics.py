@@ -1,8 +1,15 @@
+"""Image quality metrics for evaluating inpainting results.
+
+Provides whole-image and masked-region variants of:
+- PSNR  (Peak Signal-to-Noise Ratio)  – higher is better
+- SSIM  (Structural Similarity Index) – higher is better
+- LPIPS (Learned Perceptual Image Patch Similarity) – lower is better
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
 import numpy as np
 import torch
@@ -26,7 +33,15 @@ def _to_np_rgb(image: Image.Image) -> np.ndarray:
     return np.asarray(image.convert("RGB"), dtype=np.float32)
 
 
+# ── Whole-image metrics ──────────────────────────────────────────────
+
+
 def compute_psnr(target: Image.Image, prediction: Image.Image, max_pixel: float = 255.0) -> float:
+    """Peak Signal-to-Noise Ratio between target and prediction.
+
+    PSNR = 20 * log10(MAX) - 10 * log10(MSE).  Higher values indicate
+    less pixel-level distortion.
+    """
     target_np = _to_np_rgb(target)
     pred_np = _to_np_rgb(prediction)
     mse = np.mean((target_np - pred_np) ** 2)
@@ -36,6 +51,11 @@ def compute_psnr(target: Image.Image, prediction: Image.Image, max_pixel: float 
 
 
 def compute_ssim(target: Image.Image, prediction: Image.Image) -> float:
+    """Structural Similarity Index between target and prediction.
+
+    Measures luminance, contrast, and structure similarity using
+    local windowed statistics.  Range [0, 1]; higher is better.
+    """
     target_np = _to_np_rgb(target).astype(np.uint8)
     pred_np = _to_np_rgb(prediction).astype(np.uint8)
     return float(
@@ -48,6 +68,9 @@ def compute_ssim(target: Image.Image, prediction: Image.Image) -> float:
     )
 
 
+# ── LPIPS singleton ──────────────────────────────────────────────────
+# Lazy-loaded AlexNet backbone; shared across all compute_lpips calls.
+
 _lpips_model = None
 
 
@@ -59,10 +82,15 @@ def _get_lpips_model() -> lpips.LPIPS:
 
 
 def compute_lpips(target: Image.Image, prediction: Image.Image) -> float:
+    """Learned Perceptual Image Patch Similarity (lower is better).
+
+    Uses an AlexNet backbone to compare deep feature activations.
+    Images are normalised to [-1, 1] before being passed to the model.
+    """
     model = _get_lpips_model()
+    # Normalise [0,255] -> [0,1] -> [-1,1] and reshape to (1, 3, H, W)
     target_np = _to_np_rgb(target) / 255.0
     pred_np = _to_np_rgb(prediction) / 255.0
-    # LPIPS expects tensors in [-1, 1] with shape (1, 3, H, W)
     target_t = torch.from_numpy(target_np).permute(2, 0, 1).unsqueeze(0) * 2 - 1
     pred_t = torch.from_numpy(pred_np).permute(2, 0, 1).unsqueeze(0) * 2 - 1
     with torch.no_grad():
@@ -71,6 +99,8 @@ def compute_lpips(target: Image.Image, prediction: Image.Image) -> float:
 
 
 # ── Mask-region metrics ──────────────────────────────────────────────
+# These variants restrict evaluation to the inpainted (white) region of
+# the mask, giving a focused measure of reconstruction quality.
 
 def _mask_to_bool(mask: Image.Image) -> np.ndarray:
     """Convert a PIL mask to a boolean array (True = masked / inpainted region)."""
@@ -116,6 +146,7 @@ def compute_ssim_masked(
     cols = np.any(mask_bool, axis=0)
     if not rows.any():
         return 1.0  # empty mask → perfect match by convention
+    # Crop both images to the tight bounding box of the mask
     r_min, r_max = np.where(rows)[0][[0, -1]]
     c_min, c_max = np.where(cols)[0][[0, -1]]
 
@@ -160,7 +191,7 @@ def compute_lpips_masked(
     pred_np = _to_np_rgb(prediction) / 255.0
     mask_bool = _mask_to_bool(mask)
     mask_3d = np.stack([mask_bool] * 3, axis=-1).astype(np.float32)
-    # Zero out non-mask pixels so LPIPS only sees the inpainted region
+    # Zero non-mask pixels so LPIPS only measures the inpainted area
     target_masked = target_np * mask_3d
     pred_masked = pred_np * mask_3d
     target_t = torch.from_numpy(target_masked).permute(2, 0, 1).unsqueeze(0) * 2 - 1
@@ -170,31 +201,7 @@ def compute_lpips_masked(
     return float(score.item())
 
 
-def evaluate_pairs(
-    image_names: Iterable[str],
-    targets: Iterable[Image.Image],
-    predictions: Iterable[Image.Image],
-) -> List[MetricResult]:
-    results: List[MetricResult] = []
-    for image_name, target, prediction in zip(image_names, targets, predictions):
-        results.append(
-            MetricResult(
-                image_name=image_name,
-                psnr=compute_psnr(target, prediction),
-                ssim=compute_ssim(target, prediction),
-            )
-        )
-    return results
-
-
-def summarize_metrics(results: List[MetricResult]) -> dict:
-    if not results:
-        return {"count": 0, "mean_psnr": 0.0, "mean_ssim": 0.0}
-    return {
-        "count": len(results),
-        "mean_psnr": float(np.mean([r.psnr for r in results])),
-        "mean_ssim": float(np.mean([r.ssim for r in results])),
-    }
+# ── Persistence ──────────────────────────────────────────────────────
 
 
 def save_metrics_csv(results: List[MetricResult], out_csv: Path) -> None:
