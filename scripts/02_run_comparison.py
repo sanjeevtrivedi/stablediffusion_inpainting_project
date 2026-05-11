@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     # ControlNet model: auxiliary structure-guidance network layered on
     # top of the SD model; only used by the ControlNet pipeline.
     parser.add_argument("--sd-model-id", type=str, default="runwayml/stable-diffusion-inpainting")
-    parser.add_argument("--controlnet-model-id", type=str, default="lllyasviel/control_v11p_sd15_inpaint")
+    parser.add_argument("--controlnet-model-id", type=str, default="lllyasviel/control_v11p_sd15_canny")
 
     # ── Text conditioning (shared by both pipelines) ──────────────────
     # The prompt steers the denoising process via cross-attention in the
@@ -166,7 +166,7 @@ def make_controlnet_condition_mask(image: Image.Image, mask: Image.Image) -> Ima
 
     # Zero out edges outside the mask – keep only masked region edges
     mask_np = np.array(mask.convert("L"))
-    edges[mask_np < 128] = 0
+    edges[mask_np > 128] = 0
 
     edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
     return Image.fromarray(edges_rgb)
@@ -281,7 +281,7 @@ def main() -> None:
         # Create a torch random generator for reproducibility
         gen_cn = torch.Generator(device=device).manual_seed(seed)
         # Generate Canny edge map as control image
-        control_image = make_controlnet_condition_mask(image, mask)
+        control_image = make_controlnet_condition(image)
         # Measure inference time
         cn_t0 = time.perf_counter()
         # Run the ControlNet inpainting pipeline
@@ -291,6 +291,7 @@ def main() -> None:
             image=corrupted,
             mask_image=mask,
             control_image=control_image,
+            controlnet_conditioning_scale=0.5,  # Adjust strength of ControlNet guidance, for inpaiting it is between 0.3 to 0.7
             guidance_scale=args.guidance_scale,
             num_inference_steps=args.num_steps,
             eta=args.ddim_eta,
