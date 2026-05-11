@@ -297,6 +297,7 @@ def main() -> None:
             image=corrupted,
             mask_image=mask,
             control_image=control_image,
+            controlnet_conditioning_scale=0.5,  # Adjust strength of ControlNet guidance, for inpaiting it is between 0.3 to 0.7
             guidance_scale=args.guidance_scale,
             num_inference_steps=args.num_steps,
             eta=args.ddim_eta,
