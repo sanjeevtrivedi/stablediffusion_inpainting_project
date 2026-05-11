@@ -17,6 +17,12 @@ Usage examples:
 # Enable future annotations for type hints (Python 3.7+ compatibility)
 from __future__ import annotations
 
+# Fix SSL for Zscaler corporate proxy on macOS
+import os, ssl, certifi
+os.environ["SSL_CERT_FILE"] = certifi.where()
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
+
 import argparse
 import json
 import sys
@@ -79,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     # ControlNet model: auxiliary structure-guidance network layered on
     # top of the SD model; only used by the ControlNet pipeline.
     parser.add_argument("--sd-model-id", type=str, default="runwayml/stable-diffusion-inpainting")
-    parser.add_argument("--controlnet-model-id", type=str, default="lllyasviel/control_v11p_sd15_inpaint")
+    parser.add_argument("--controlnet-model-id", type=str, default="lllyasviel/control_v11p_sd15_canny")
 
     # ── Text conditioning (shared by both pipelines) ──────────────────
     # The prompt steers the denoising process via cross-attention in the
@@ -133,7 +139,7 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Convert to grayscale for edge detection
     gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
 
-    # Auto-threshold using the median pixel value (Otsu-style heuristic)
+    # Auto-threshold using the median pixel value (Otsu-style)
     median = np.median(gray)
     low = int(max(0, 0.66 * median))
     high = int(min(255, 1.33 * median))
@@ -144,6 +150,32 @@ def make_controlnet_condition(image: Image.Image) -> Image.Image:
     # Return as PIL Image (RGB)
     return Image.fromarray(edges_rgb)
 
+def make_controlnet_condition_mask(image: Image.Image, mask: Image.Image) -> Image.Image:
+    """Build a Canny edge map only for the masked (inpaint) region.
+
+    Edges are computed from the full image but zeroed outside the mask,
+    so ControlNet receives structural guidance only within the region to
+    fill.  This can help the model focus on reconstructing structure
+    inside the hole without being influenced by surrounding edges.
+
+    Returns a PIL Image (RGB) – same type as make_controlnet_condition()
+    so the two functions are interchangeable at the call site.
+    """
+    image_np = np.array(image.convert("RGB"))
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+    median = np.median(gray)
+    low = int(max(0, 0.66 * median))
+    high = int(min(255, 1.33 * median))
+
+    edges = cv2.Canny(gray, low, high)
+
+    # Zero out edges outside the mask – keep only masked region edges
+    mask_np = np.array(mask.convert("L"))
+    edges[mask_np > 128] = 0
+
+    edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+    return Image.fromarray(edges_rgb)
 
 def main() -> None:
 
