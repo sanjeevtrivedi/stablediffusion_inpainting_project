@@ -1,0 +1,33 @@
+{
+  "count": 3,
+  "standard": {
+    "mean_psnr": 23.58536656697591,
+    "mean_ssim": 0.7120891319829692,
+    "mean_lpips": 0.12679956605037054,
+    "mean_mask_psnr": 18.29901377360026,
+    "mean_mask_ssim": 0.6742775225158965,
+    "mean_mask_lpips": 0.0370987206697464,
+    "mean_time_sec": 737.1918201666671,
+    "total_time_sec": 2211.575460500001
+  },
+  "controlnet": {
+    "mean_psnr": 24.14957618713379,
+    "mean_ssim": 0.7192912137490183,
+    "mean_lpips": 0.12136173993349075,
+    "mean_mask_psnr": 19.166210174560547,
+    "mean_mask_ssim": 0.6830785726951901,
+    "mean_mask_lpips": 0.03315874251226584,
+    "mean_time_sec": 1004.0660550133333,
+    "total_time_sec": 3012.19816504
+  },
+  "config": {
+    "mask_type": "irregular",
+    "guidance_scale": 7.5,
+    "num_steps": 10,
+    "sd_model": "runwayml/stable-diffusion-inpainting",
+    "controlnet_model": "lllyasviel/control_v11p_sd15_canny",
+    "image_size": 512,
+    "seed": 42,
+    "device": "mps"
+  }
+}
